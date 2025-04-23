@@ -3,26 +3,40 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2025-03-31.basil",
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: "2025-03-31.basil", // Use your Stripe-supported API version
 });
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    console.log("Incoming request body:", req.body);
-console.log("Base URL:", process.env.NEXT_PUBLIC_BASE_URL);
-console.log("Stripe secret key loaded:", !!process.env.STRIPE_SECRET_KEY);
+// Define item type
+type CartItem = {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  price: number;
+  quantity: number;
+};
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  console.log("Incoming request body:", req.body);
+  console.log("Base URL:", process.env.NEXT_PUBLIC_BASE_URL);
+  console.log("Stripe secret key loaded:", !!process.env.STRIPE_SECRET_KEY);
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { cart } = req.body;
+    const { cart }: { cart: CartItem[] } = req.body;
 
     if (!cart || cart.length === 0) {
       return res.status(400).json({ error: "Cart is empty or invalid" });
     }
 
-    const line_items = cart.map((item: any) => ({
+    const line_items: Stripe.Checkout.SessionCreateParams.LineItem[] = cart.map((item) => ({
       price_data: {
         currency: "usd",
         product_data: {
@@ -30,7 +44,7 @@ console.log("Stripe secret key loaded:", !!process.env.STRIPE_SECRET_KEY);
           description: item.description,
           images: [item.image],
         },
-        unit_amount: Math.round(item.price * 100), // Stripe uses cents
+        unit_amount: Math.round(item.price * 100), // Convert dollars to cents
       },
       quantity: item.quantity,
     }));
@@ -44,8 +58,10 @@ console.log("Stripe secret key loaded:", !!process.env.STRIPE_SECRET_KEY);
     });
 
     return res.status(200).json({ id: session.id });
-  } catch (err: any) {
-    console.error("Stripe session error:", err);
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error occurred";
+    console.error("Stripe session error:", errorMessage);
     return res.status(500).json({ error: "Failed to create checkout session" });
   }
 }
